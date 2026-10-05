@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hoangtt.03 - Full Source Pro</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:Segoe UI,system-ui,sans-serif}
+body{background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;justify-content:center;padding:20px;
+background-image:linear-gradient(135deg,#0a0a0f 40%,transparent 40%),linear-gradient(225deg,#1a0a2e 35%,transparent 35%),linear-gradient(45deg,#2d1b4e 25%,transparent 25%)}
+.card{background:#12121a;border:1px solid #3b2a5a;border-radius:14px;padding:28px;width:100%;max-width:1000px;
+box-shadow:0 0 0 1px #ffffff10,0 12px 40px rgba(80,40,140,.35);position:relative;overflow:hidden}
+.card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#7b5cff,#c084fc,#fff,#7b5cff)}
+h1{font-size:1.45rem;color:#f0e6ff;margin-bottom:4px}
+h1 span{color:#c084fc}
+.sub{color:#9b8bb8;font-size:.9rem;margin-bottom:18px}
+label{display:block;font-size:.85rem;color:#b8a9d4;margin-bottom:6px}
+input[type=text]{width:100%;background:#0d0d14;border:1px solid #3b2a5a;border-radius:10px;color:#e8e8f0;padding:12px 14px;font-size:14px;outline:none;margin-bottom:12px}
+input[type=text]:focus{border-color:#7b5cff;box-shadow:0 0 0 2px #7b5cff33}
+select{width:100%;background:#0d0d14;border:1px solid #3b2a5a;border-radius:10px;color:#e8e8f0;padding:11px 14px;font-size:14px;outline:none;margin-bottom:12px}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.btn{background:linear-gradient(135deg,#6d28d9,#4c1d95);color:#f5f0ff;border:1px solid #a78bfa;padding:11px 20px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer}
+.btn:hover{background:linear-gradient(135deg,#7c3aed,#5b21b6)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn2{background:#1e1a2e;border:1px solid #5b4a7a;color:#e0d4ff;padding:11px 16px;border-radius:10px;font-size:13px;cursor:pointer}
+.btn2:hover{background:#2a2340;border-color:#a78bfa}
+.status{margin:10px 0 8px;font-size:.85rem;color:#9b8bb8;min-height:1.3em;word-break:break-all}
+textarea{width:100%;height:440px;background:#0d0d14;border:1px solid #3b2a5a;border-radius:10px;color:#c4b5fd;padding:14px;font-family:Consolas,monospace;font-size:12.5px;resize:vertical;outline:none;white-space:pre;line-height:1.4}
+.note{margin-top:12px;font-size:.78rem;color:#7a6b96;line-height:1.55}
+.checks{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:12px;font-size:.85rem;color:#b8a9d4}
+.checks label{display:flex;align-items:center;gap:6px;cursor:pointer;margin:0}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1><span>Hoangtt.03</span> — Full Source Pro</h1>
+  <p class="sub">Dán link → lấy full HTML source. Auto thử nhiều proxy đến khi được.</p>
+
+  <label>URL trang web</label>
+  <input type="text" id="urlInput" placeholder="https://example.com hoặc example.com">
+
+  <label>Chế độ proxy</label>
+  <select id="modeSelect">
+    <option value="auto" selected>Auto (thử lần lượt đến khi thành công)</option>
+    <option value="allorigins">AllOrigins only</option>
+    <option value="corsproxy">CorsProxy only</option>
+    <option value="codetabs">CodeTabs only</option>
+    <option value="isomorphic">Isomorphic only</option>
+    <option value="direct">Direct (no proxy)</option>
+  </select>
+
+  <div class="checks">
+    <label><input type="checkbox" id="chkFollow" checked> Follow redirect</label>
+    <label><input type="checkbox" id="chkUA" checked> Fake desktop UA (proxy)</label>
+  </div>
+
+  <div class="row">
+    <button class="btn" id="getBtn" onclick="getSource()">Lấy Full Source</button>
+    <button class="btn2" onclick="copySource()">Copy</button>
+    <button class="btn2" onclick="downloadSource()">Tải .html</button>
+    <button class="btn2" onclick="downloadTxt()">Tải .txt</button>
+    <button class="btn2" onclick="clearAll()">Clear</button>
+  </div>
+
+  <div class="status" id="status"></div>
+  <textarea id="output" placeholder="Full page source sẽ hiện ở đây..." readonly></textarea>
+
+  <p class="note">
+    Auto mode thử: Direct → AllOrigins → CorsProxy → CodeTabs → Isomorphic.<br>
+    Site HTTPS + Cloudflare nặng đôi khi vẫn chặn — đổi mode thủ công hoặc thử lại.
+  </p>
+</div>
+
+<script>
+var PROXIES = {
+  direct: function (u) { return u; },
+  allorigins: function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
+  corsproxy: function (u) { return 'https://corsproxy.io/?' + encodeURIComponent(u); },
+  codetabs: function (u) { return 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u); },
+  isomorphic: function (u) { return 'https://cors.isomorphic-git.org/' + u; }
+};
+
+var AUTO_ORDER = ['direct', 'allorigins', 'corsproxy', 'codetabs', 'isomorphic'];
+
+function normalizeUrl(raw) {
+  var u = (raw || '').trim();
+  if (!u) return '';
+  if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+  return u;
+}
+
+async function tryFetch(fetchUrl, timeoutMs) {
+  var ctrl = new AbortController();
+  var t = setTimeout(function () { ctrl.abort(); }, timeoutMs || 20000);
+  try {
+    var res = await fetch(fetchUrl, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: ctrl.signal,
+      redirect: 'follow',
+      headers: { 'Accept': 'text/html,application/xhtml+xml,*/*' }
+    });
+    clearTimeout(t);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var text = await res.text();
+    if (!text || text.length < 10) throw new Error('Empty body');
+    return text;
+  } catch (e) {
+    clearTimeout(t);
+    throw e;
+  }
+}
+
+async function getSource() {
+  var url = normalizeUrl(document.getElementById('urlInput').value);
+  var mode = document.getElementById('modeSelect').value;
+  var output = document.getElementById('output');
+  var status = document.getElementById('status');
+  var btn = document.getElementById('getBtn');
+
+  if (!url) { alert('Dán link vào đã'); return; }
+  document.getElementById('urlInput').value = url;
+
+  btn.disabled = true;
+  output.value = '';
+  status.textContent = 'Đang lấy...';
+
+  var list = mode === 'auto' ? AUTO_ORDER.slice() : [mode];
+  var lastErr = '';
+  var ok = false;
+
+  for (var i = 0; i < list.length; i++) {
+    var name = list[i];
+    var build = PROXIES[name];
+    if (!build) continue;
+    status.textContent = 'Thử [' + (i + 1) + '/' + list.length + '] ' + name + ' ...';
+    try {
+      var text = await tryFetch(build(url), 22000);
+      output.value = text;
+      status.textContent = 'OK • ' + text.length.toLocaleString() + ' ký tự • qua: ' + name;
+      ok = true;
+      break;
+    } catch (e) {
+      lastErr = (e && e.name === 'AbortError') ? 'timeout' : (e.message || String(e));
+      status.textContent = name + ' fail (' + lastErr + ') — thử tiếp...';
+    }
+  }
+
+  if (!ok) {
+    status.textContent = 'Tất cả proxy fail. Lỗi cuối: ' + lastErr;
+    output.value = '';
+  }
+  btn.disabled = false;
+}
+
+function copySource() {
+  var t = document.getElementById('output').value;
+  if (!t) return;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(t).then(function () { alert('Đã copy!'); });
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = t;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    alert('Đã copy!');
+  }
+}
+
+function downloadSource() {
+  var t = document.getElementById('output').value;
+  if (!t) return;
+  var blob = new Blob([t], { type: 'text/html;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'source.html';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function downloadTxt() {
+  var t = document.getElementById('output').value;
+  if (!t) return;
+  var blob = new Blob([t], { type: 'text/plain;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'source.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function clearAll() {
+  document.getElementById('urlInput').value = '';
+  document.getElementById('output').value = '';
+  document.getElementById('status').textContent = '';
+}
+
+document.getElementById('urlInput').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') getSource();
+});
+</script>
+</body>
+</html>
