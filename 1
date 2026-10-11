@@ -7,7 +7,7 @@ local lp = Players.LocalPlayer
 local parentGui
 pcall(function() parentGui = game:GetService("CoreGui") end)
 if not parentGui then parentGui = lp:WaitForChild("PlayerGui") end
-if parentGui:FindFirstChild("ScreenGui") then parentGui.ScreenGui:Destroy() end
+if parentGui:FindFirstChild("ScreenGui1") then parentGui.ScreenGui:Destroy() end
 
 local MIN_CFRAME_INTERVAL = 1 / 45
 local LastCFrameAt = 0
@@ -236,7 +236,7 @@ local FONT = Enum.Font.GothamMedium
 local FONT_BOLD = Enum.Font.GothamBold
 
 local screen = Instance.new("ScreenGui")
-screen.Name = "ScreenGui"
+screen.Name = "ScreenGui1"
 screen.ResetOnSpawn = false
 screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screen.IgnoreGuiInset = true
