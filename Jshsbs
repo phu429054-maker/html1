@@ -1,0 +1,723 @@
+
+-- STARX ULTRA MODERN MESSAGE GUI
+-- LocalScript: StarterPlayer > StarterPlayerScripts
+-- Smooth continuous RGB wave + AI credit
+-- Original local system-message behavior preserved
+
+local Players = game:GetService("Players")
+local TextChatService = game:GetService("TextChatService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local old = playerGui:FindFirstChild("StarXMessageGui")
+if old then old:Destroy() end
+
+local alive = true
+local closing = false
+local busy = false
+local connections = {}
+local animations = {}
+
+local function connect(signal, callback)
+	local c = signal:Connect(callback)
+	table.insert(connections, c)
+	return c
+end
+
+local function tween(obj, duration, properties, style, direction)
+	if not obj or not obj.Parent then return end
+
+	local animation = TweenService:Create(
+		obj,
+		TweenInfo.new(
+			duration,
+			style or Enum.EasingStyle.Quint,
+			direction or Enum.EasingDirection.Out
+		),
+		properties
+	)
+
+	table.insert(animations, animation)
+	animation:Play()
+	return animation
+end
+
+local function make(class, props, parent)
+	local obj = Instance.new(class)
+	for k, v in pairs(props) do
+		obj[k] = v
+	end
+	obj.Parent = parent
+	return obj
+end
+
+local function round(obj, radius)
+	return make("UICorner", {
+		CornerRadius = UDim.new(0, radius)
+	}, obj)
+end
+
+local function stroke(obj, color, thickness, transparency)
+	return make("UIStroke", {
+		Color = color,
+		Thickness = thickness,
+		Transparency = transparency or 0
+	}, obj)
+end
+
+local function cp(time, color)
+	return ColorSequenceKeypoint.new(time, color)
+end
+
+local function gradient(obj, colors, rotation)
+	return make("UIGradient", {
+		Color = ColorSequence.new(colors),
+		Rotation = rotation or 0
+	}, obj)
+end
+
+-- ROOT
+
+local gui = make("ScreenGui", {
+	Name = "StarXMessageGui",
+	ResetOnSpawn = false,
+	IgnoreGuiInset = true,
+	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	DisplayOrder = 100
+}, playerGui)
+
+-- OUTER GLOW
+
+local glow = make("Frame", {
+	Name = "OuterGlow",
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.fromScale(0.5, 0.5),
+	Size = UDim2.fromOffset(318, 218),
+	BackgroundColor3 = Color3.fromRGB(255, 35, 110),
+	BackgroundTransparency = 0.91,
+	BorderSizePixel = 0,
+	ZIndex = 0
+}, gui)
+round(glow, 24)
+
+local glowStroke = stroke(
+	glow,
+	Color3.fromRGB(255, 55, 145),
+	3,
+	0.4
+)
+
+-- MAIN PANEL
+
+local frame = make("Frame", {
+	Name = "Main",
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.fromScale(0.5, 0.5),
+	Size = UDim2.fromOffset(300, 192),
+	BackgroundColor3 = Color3.fromRGB(16, 18, 29),
+	BackgroundTransparency = 0.04,
+	BorderSizePixel = 0,
+	ClipsDescendants = true,
+	ZIndex = 1
+}, gui)
+round(frame, 20)
+
+gradient(frame, {
+	cp(0, Color3.fromRGB(37, 23, 47)),
+	cp(0.48, Color3.fromRGB(16, 21, 34)),
+	cp(1, Color3.fromRGB(24, 17, 40))
+}, 35)
+
+local border = stroke(
+	frame,
+	Color3.fromRGB(255, 70, 145),
+	1.6,
+	0.1
+)
+
+local borderGradient = gradient(border, {
+	cp(0, Color3.fromRGB(255, 45, 105)),
+	cp(0.25, Color3.fromRGB(180, 70, 255)),
+	cp(0.5, Color3.fromRGB(60, 175, 255)),
+	cp(0.75, Color3.fromRGB(180, 70, 255)),
+	cp(1, Color3.fromRGB(255, 45, 105))
+}, 0)
+
+-- TOP ACCENT
+
+local accent = make("Frame", {
+	Name = "TopAccent",
+	Position = UDim2.fromOffset(18, 0),
+	Size = UDim2.new(1, -36, 0, 3),
+	BackgroundColor3 = Color3.fromRGB(255, 55, 130),
+	BorderSizePixel = 0,
+	ZIndex = 3
+}, frame)
+round(accent, 5)
+
+local accentGradient = gradient(accent, {
+	cp(0, Color3.fromRGB(90, 130, 255)),
+	cp(0.5, Color3.fromRGB(255, 55, 135)),
+	cp(1, Color3.fromRGB(185, 75, 255))
+}, 0)
+
+-- LOGO
+
+local icon = make("Frame", {
+	Name = "Logo",
+	Position = UDim2.fromOffset(15, 15),
+	Size = UDim2.fromOffset(36, 36),
+	BackgroundColor3 = Color3.fromRGB(200, 40, 125),
+	BorderSizePixel = 0,
+	ZIndex = 3
+}, frame)
+round(icon, 12)
+
+local iconGradient = gradient(icon, {
+	cp(0, Color3.fromRGB(110, 85, 255)),
+	cp(1, Color3.fromRGB(255, 50, 125))
+}, 45)
+
+make("TextLabel", {
+	Name = "LogoText",
+	Size = UDim2.fromScale(1, 1),
+	BackgroundTransparency = 1,
+	Text = "SX",
+	TextColor3 = Color3.new(1, 1, 1),
+	TextSize = 15,
+	Font = Enum.Font.GothamBlack,
+	ZIndex = 4
+}, icon)
+
+-- TITLE
+
+local title = make("TextLabel", {
+	Name = "Title",
+	Active = true,
+	Position = UDim2.fromOffset(60, 13),
+	Size = UDim2.new(1, -105, 0, 23),
+	BackgroundTransparency = 1,
+	Text = "StarX Message",
+	TextColor3 = Color3.new(1, 1, 1),
+	TextSize = 15,
+	Font = Enum.Font.GothamBold,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+	ZIndex = 3
+}, frame)
+
+local titleGradient = gradient(title, {
+	cp(0, Color3.fromRGB(255, 75, 140)),
+	cp(0.5, Color3.fromRGB(190, 125, 255)),
+	cp(1, Color3.fromRGB(90, 190, 255))
+}, 0)
+
+make("TextLabel", {
+	Name = "Subtitle",
+	Position = UDim2.fromOffset(61, 35),
+	Size = UDim2.new(1, -110, 0, 15),
+	BackgroundTransparency = 1,
+	Text = "VERIFIED CHAT MESSAGE  ",
+	TextColor3 = Color3.fromRGB(160, 166, 193),
+	TextSize = 8,
+	Font = Enum.Font.GothamMedium,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+	ZIndex = 3
+}, frame)
+
+local statusDot = make("Frame", {
+	Name = "StatusDot",
+	Position = UDim2.new(1, -49, 0, 23),
+	Size = UDim2.fromOffset(6, 6),
+	BackgroundColor3 = Color3.fromRGB(90, 255, 175),
+	BorderSizePixel = 0,
+	ZIndex = 4
+}, frame)
+round(statusDot, 6)
+
+-- CLOSE BUTTON
+
+local close = make("TextButton", {
+	Name = "Close",
+	Position = UDim2.new(1, -34, 0, 13),
+	Size = UDim2.fromOffset(25, 25),
+	BackgroundColor3 = Color3.fromRGB(54, 28, 46),
+	Text = "×",
+	TextColor3 = Color3.fromRGB(255, 160, 185),
+	TextSize = 20,
+	Font = Enum.Font.GothamMedium,
+	AutoButtonColor = false,
+	ZIndex = 5
+}, frame)
+round(close, 8)
+
+stroke(close, Color3.fromRGB(255, 80, 135), 1, 0.35)
+
+-- SEPARATOR
+
+make("Frame", {
+	Name = "Separator",
+	Position = UDim2.new(0, 15, 0, 59),
+	Size = UDim2.new(1, -30, 0, 1),
+	BackgroundColor3 = Color3.fromRGB(100, 105, 140),
+	BackgroundTransparency = 0.62,
+	BorderSizePixel = 0,
+	ZIndex = 2
+}, frame)
+
+-- INPUT
+
+local inputShell = make("Frame", {
+	Name = "InputGlass",
+	Position = UDim2.fromOffset(14, 70),
+	Size = UDim2.new(1, -28, 0, 39),
+	BackgroundColor3 = Color3.fromRGB(25, 28, 43),
+	BackgroundTransparency = 0.06,
+	BorderSizePixel = 0,
+	ZIndex = 2
+}, frame)
+round(inputShell, 11)
+
+gradient(inputShell, {
+	cp(0, Color3.fromRGB(35, 29, 49)),
+	cp(1, Color3.fromRGB(19, 30, 45))
+}, 15)
+
+local inputStroke = stroke(
+	inputShell,
+	Color3.fromRGB(100, 85, 135),
+	1,
+	0.3
+)
+
+local box = make("TextBox", {
+	Name = "MessageInput",
+	Position = UDim2.fromOffset(12, 0),
+	Size = UDim2.new(1, -24, 1, 0),
+	BackgroundTransparency = 1,
+	Text = "",
+	PlaceholderText = "Type something...",
+	PlaceholderColor3 = Color3.fromRGB(140, 146, 170),
+	TextColor3 = Color3.fromRGB(248, 248, 255),
+	TextSize = 13,
+	Font = Enum.Font.Gotham,
+	ClearTextOnFocus = false,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+	ZIndex = 4
+}, inputShell)
+
+connect(box.Focused, function()
+	if not alive then return end
+	tween(inputStroke, 0.22, {
+		Color = Color3.fromRGB(210, 100, 255),
+		Transparency = 0,
+		Thickness = 1.5
+	})
+end)
+
+connect(box.FocusLost, function()
+	if not alive then return end
+	tween(inputStroke, 0.25, {
+		Color = Color3.fromRGB(100, 85, 135),
+		Transparency = 0.3,
+		Thickness = 1
+	})
+end)
+
+-- SEND BUTTON
+
+local send = make("TextButton", {
+	Name = "SendButton",
+	Position = UDim2.fromOffset(14, 119),
+	Size = UDim2.new(1, -28, 0, 34),
+	BackgroundColor3 = Color3.fromRGB(210, 40, 115),
+	Text = "SEND TO CHAT     ›",
+	TextColor3 = Color3.new(1, 1, 1),
+	TextSize = 11,
+	Font = Enum.Font.GothamBold,
+	AutoButtonColor = false,
+	ClipsDescendants = true,
+	ZIndex = 3
+}, frame)
+round(send, 10)
+
+local sendGradient = gradient(send, {
+	cp(0, Color3.fromRGB(100, 85, 255)),
+	cp(0.45, Color3.fromRGB(210, 45, 155)),
+	cp(1, Color3.fromRGB(255, 60, 115))
+}, 0)
+
+local sendStroke = stroke(
+	send,
+	Color3.fromRGB(255, 145, 195),
+	1,
+	0.5
+)
+
+-- AI CREDIT
+
+make("TextLabel", {
+	Name = "AICredit",
+	Position = UDim2.new(0, 10, 0, 158),
+	Size = UDim2.new(1, -20, 0, 13),
+	BackgroundTransparency = 1,
+	Text = "This Script was Make by Ai idea from StarX",
+	TextColor3 = Color3.fromRGB(175, 180, 202),
+	TextSize = 9,
+	Font = Enum.Font.GothamMedium,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+	ZIndex = 3
+}, frame)
+
+make("TextLabel", {
+	Name = "Footer",
+	Position = UDim2.new(0, 12, 1, -15),
+	Size = UDim2.new(1, -24, 0, 10),
+	BackgroundTransparency = 1,
+	Text = "STARX  •  LOCAL MESSAGE SYSTEM",
+	TextColor3 = Color3.fromRGB(125, 132, 159),
+	TextSize = 7,
+	Font = Enum.Font.GothamMedium,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	ZIndex = 3
+}, frame)
+
+
+-- SMOOTH CONTINUOUS MOVING RGB WAVE
+
+local waveGradients = {
+	titleGradient,
+	borderGradient,
+	sendGradient,
+	accentGradient,
+	iconGradient
+}
+
+local waveSpeed = 0.10
+local waveConnection
+
+waveConnection = RunService.RenderStepped:Connect(function()
+	if not alive or not gui.Parent then
+		if waveConnection then
+			waveConnection:Disconnect()
+		end
+		return
+	end
+
+	local t = os.clock() * waveSpeed
+
+	for index, targetGradient in ipairs(waveGradients) do
+		if targetGradient and targetGradient.Parent then
+			local phase = (t + (index - 1) * 0.12) % 1
+
+			targetGradient.Color = ColorSequence.new({
+				cp(0, Color3.fromHSV((phase + 0.00) % 1, 1, 1)),
+				cp(0.25, Color3.fromHSV((phase + 0.25) % 1, 1, 1)),
+				cp(0.50, Color3.fromHSV((phase + 0.50) % 1, 1, 1)),
+				cp(0.75, Color3.fromHSV((phase + 0.75) % 1, 1, 1)),
+				cp(1, Color3.fromHSV((phase + 1.00) % 1, 1, 1))
+			})
+
+			-- Gerakan gelombang yang berterusan
+			targetGradient.Offset = Vector2.new(
+				math.sin(t * 0.7 + index) * 0.4,
+				0
+			)
+		end
+	end
+end)
+
+table.insert(connections, waveConnection)
+
+-- SOFT GLOW PULSE
+
+task.spawn(function()
+	while alive and gui.Parent do
+		tween(glowStroke, 2.8, {
+			Transparency = 0.62,
+			Thickness = 2
+		})
+
+		tween(glow, 2.8, {
+			BackgroundTransparency = 0.95
+		})
+
+		task.wait(2.8)
+		if not alive or not gui.Parent then break end
+
+		tween(glowStroke, 2.8, {
+			Transparency = 0.32,
+			Thickness = 3
+		})
+
+		tween(glow, 2.8, {
+			BackgroundTransparency = 0.88
+		})
+
+		task.wait(2.8)
+	end
+end)
+
+-- BUTTON PRESS ANIMATION
+
+local function pressAnimation(button)
+	if not alive or not button or not button.Parent then return end
+
+	local originalSize = button.Size
+
+	tween(button, 0.08, {
+		Size = UDim2.new(
+			originalSize.X.Scale,
+			originalSize.X.Offset - 2,
+			originalSize.Y.Scale,
+			originalSize.Y.Offset - 1
+		)
+	}, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+
+	task.delay(0.1, function()
+		if alive and button.Parent then
+			tween(button, 0.18, {
+				Size = originalSize
+			}, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+		end
+	end)
+end
+
+-- ORIGINAL LOCAL SYSTEM MESSAGE BEHAVIOR
+
+local function sendMessage()
+	if not alive or busy then return end
+
+	local message = box.Text:match("^%s*(.-)%s*$")
+
+	if message == "" then
+		tween(inputStroke, 0.15, {
+			Color = Color3.fromRGB(255, 85, 125)
+		})
+
+		task.delay(0.4, function()
+			if alive and inputStroke.Parent then
+				tween(inputStroke, 0.25, {
+					Color = Color3.fromRGB(100, 85, 135)
+				})
+			end
+		end)
+
+		return
+	end
+
+	pressAnimation(send)
+
+	if TextChatService.ChatVersion ~= Enum.ChatVersion.TextChatService then
+		box.PlaceholderText = "Game uses Legacy Chat"
+		return
+	end
+
+	local channels = TextChatService:FindFirstChild("TextChannels")
+	local general = channels and channels:FindFirstChild("RBXGeneral")
+
+	if not general then
+		box.PlaceholderText = "RBXGeneral not found"
+		return
+	end
+
+	busy = true
+
+	local success = pcall(function()
+		general:DisplaySystemMessage(
+			player.DisplayName ..": ".. message
+		)
+	end)
+
+	if success then
+		box.Text = ""
+		send.Text = "MESSAGE SENT  ✓"
+
+		tween(sendStroke, 0.2, {
+			Color = Color3.fromRGB(100, 255, 180),
+			Transparency = 0.05
+		})
+	else
+		send.Text = "FAILED"
+		box.PlaceholderText = "Could not display message"
+	end
+
+	task.delay(0.9, function()
+		if alive and send.Parent then
+			send.Text = "SEND TO CHAT     ›"
+
+			tween(sendStroke, 0.25, {
+				Color = Color3.fromRGB(255, 145, 195),
+				Transparency = 0.5
+			})
+		end
+
+		busy = false
+	end)
+end
+
+connect(send.Activated, function()
+	if not alive then return end
+	sendMessage()
+end)
+
+connect(box.FocusLost, function(enterPressed)
+	if enterPressed then
+		sendMessage()
+	end
+end)
+
+-- SMOOTH DRAG: MOUSE + TOUCH
+
+local dragging = false
+local dragStart
+local startPosition
+local targetPosition
+local activeTouch
+
+connect(title.InputBegan, function(input)
+	if not alive then return end
+
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch then
+
+		dragging = true
+		dragStart = input.Position
+		startPosition = frame.Position
+		targetPosition = frame.Position
+
+		if input.UserInputType == Enum.UserInputType.Touch then
+			activeTouch = input
+		else
+			activeTouch = nil
+		end
+	end
+end)
+
+connect(UserInputService.InputChanged, function(input)
+	if not alive or not dragging then return end
+
+	local isMouse =
+		input.UserInputType == Enum.UserInputType.MouseMovement
+
+	local isTouch =
+		activeTouch ~= nil and input == activeTouch
+
+	if isMouse or isTouch then
+		local delta = input.Position - dragStart
+
+		targetPosition = UDim2.new(
+			startPosition.X.Scale,
+			startPosition.X.Offset + delta.X,
+			startPosition.Y.Scale,
+			startPosition.Y.Offset + delta.Y
+		)
+	end
+end)
+
+connect(UserInputService.InputEnded, function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = false
+		activeTouch = nil
+	elseif activeTouch and input == activeTouch then
+		dragging = false
+		activeTouch = nil
+	end
+end)
+
+connect(RunService.RenderStepped, function(dt)
+	if not alive or not frame.Parent then return end
+
+	if dragging and targetPosition then
+		local alpha = 1 - math.exp(-22 * dt)
+		frame.Position = frame.Position:Lerp(targetPosition, alpha)
+	end
+
+	if glow.Parent then
+		glow.Position = frame.Position
+	end
+end)
+
+-- CLOSE
+
+connect(close.Activated, function()
+	if closing or not alive then return end
+
+	closing = true
+	alive = false
+	dragging = false
+
+	tween(frame, 0.27, {
+		Size = UDim2.fromOffset(255, 160),
+		BackgroundTransparency = 1
+	}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+
+	tween(glow, 0.27, {
+		Size = UDim2.fromOffset(260, 170),
+		BackgroundTransparency = 1
+	})
+
+	tween(border, 0.2, { Transparency = 1 })
+	tween(glowStroke, 0.2, { Transparency = 1 })
+
+	for _, obj in ipairs(frame:GetDescendants()) do
+		if obj:IsA("TextLabel")
+			or obj:IsA("TextButton")
+			or obj:IsA("TextBox") then
+
+			tween(obj, 0.18, {
+				TextTransparency = 1,
+				BackgroundTransparency = 1
+			})
+		elseif obj:IsA("UIStroke") then
+			tween(obj, 0.18, { Transparency = 1 })
+		elseif obj:IsA("Frame") then
+			tween(obj, 0.18, { BackgroundTransparency = 1 })
+		end
+	end
+
+	task.wait(0.3)
+
+	for _, connection in ipairs(connections) do
+		if connection.Connected then
+			connection:Disconnect()
+		end
+	end
+
+	for _, animation in ipairs(animations) do
+		pcall(function()
+			animation:Cancel()
+		end)
+	end
+
+	if gui.Parent then
+		gui:Destroy()
+	end
+end)
+
+-- ENTRANCE ANIMATION
+
+frame.Size = UDim2.fromOffset(265, 165)
+frame.BackgroundTransparency = 1
+glow.BackgroundTransparency = 1
+border.Transparency = 1
+
+tween(frame, 0.5, {
+	Size = UDim2.fromOffset(300, 192),
+	BackgroundTransparency = 0.04
+}, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+
+tween(glow, 0.55, {
+	BackgroundTransparency = 0.9
+})
+
+tween(border, 0.5, {
+	Transparency = 0.1
+})
